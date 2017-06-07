@@ -23,6 +23,8 @@ public class phaseManager : MonoBehaviour {
 	IEnumerator resolvePhasesCoroutine() {
 		dashExecute ();
 		yield return new WaitForSeconds (1f);
+		throwExecute ();
+		yield return new WaitForSeconds (1f);
 		jumpExecute ();
 		yield return new WaitForSeconds (1f);
 		roundReset ();
@@ -32,6 +34,14 @@ public class phaseManager : MonoBehaviour {
 		for (int i = 0; i < inputManager.instance.playerArray.Count; i++) {
 			if (inputManager.instance.playerArray [i].moveType == "dash") {
 				inputManager.instance.playerArray [i].dashGoCall();
+			}
+		}
+	}
+
+	void throwExecute() {
+		for (int i = 0; i < inputManager.instance.playerArray.Count; i++) {
+			if (inputManager.instance.playerArray [i].moveType == "throw") {
+				inputManager.instance.playerArray [i].throwGoCall();
 			}
 		}
 	}

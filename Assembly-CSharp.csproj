@@ -50,6 +50,7 @@
      <Compile Include="Assets\Scripts\inputManager.cs" />
      <Compile Include="Assets\Scripts\phaseManager.cs" />
      <Compile Include="Assets\gameManager.cs" />
+     <Compile Include="Assets\stoneScript.cs" />
      <None Include="Assets\Mr. Mo Base Character\Readme.txt" />
  <Reference Include="UnityEngine.UI">
  <HintPath>/Applications/Unity56/Unity.app/Contents/UnityExtensions/Unity/GUISystem/UnityEngine.UI.dll</HintPath>

@@ -4,26 +4,30 @@ using UnityEngine;
 
 public class Monkey : MonoBehaviour {
 	public GameObject dashRangeDisplay;
+	public GameObject stoneObject;
+	public LineRenderer actionRenderer;
 	public float dashRange;
+	public float jumpSlamRadius;
+	public float jumpSlamMagnitude;
 	public float dashTime;
 	public float jumpTime;
+	public float recoilBoopMagnitude;
+	public float throwBoopMagnitude;
+	private float recoilMultiplier;
 	private bool isDashPathing = false;
 	private bool isJumpPathing = false;
-	public bool isDashing = false;
-	public bool isJumping = false;
-	public bool isDashRecoiling = false;
-	public bool isShook = false;
-	public Vector3 dashingVector;
-	public LineRenderer actionRenderer;
-	public Vector3 moveTarget;
-	public Vector3 projectedTarget;
-	public bool projectingValidMove = false;
-	public bool moveLocked = false;
-	public bool activePlayer = false;
-	public bool hasMoved = false;
+	private bool isThrowPathing = false;
+	private bool isStoic = false;
+	private Coroutine coroutineCall;
+	[HideInInspector]
+	public bool isDashing, isJumping, isDashRecoiling, isJumpRecoiling, isBoopRecoiling, isThrowRecoiling, isShook, projectingValidMove, moveLocked, activePlayer, hasMoved, thrownStoneHit;
+	[HideInInspector]
+	public Vector3 dashingVector, throwingVector, jumpingVector, recoilingVector, moveTarget, projectedTarget;
+	[HideInInspector]
 	public string moveType = "dash";
+	[HideInInspector]
 	public int playerNo;
-
+	public LayerMask raycastLayer, throwRaycastLayer;
 	void Start () {
 		inputManager.instance.playerArray.Add (this);
 		playerNo = inputManager.instance.playerArray.Count;
@@ -37,21 +41,32 @@ public class Monkey : MonoBehaviour {
 			dashMoveParse ();
 		} else if (isJumpPathing) {
 			jumpMoveParse ();
+		} else if (isThrowPathing) {
+			throwMoveParse ();
 		}
 	}
 
 	void OnTriggerEnter(Collider other) {
-		Debug.Log ("collision!");
-		if (isDashing) {
-			other.GetComponent<Monkey> ().dashRecoilCall (dashingVector);
-			other.GetComponent<Monkey> ().isShook = true;
+		if (other.gameObject.CompareTag("Monker")) {
+			if (isDashing) {
+				if (other.GetComponent<Monkey> ().isDashing) {
+					dashRecoilCall (other.GetComponent<Monkey> ().dashingVector);
+				}
+				other.GetComponent<Monkey> ().dashRecoilCall (dashingVector);
+				other.GetComponent<Monkey> ().isShook = true;
+			} else if (isDashRecoiling || isJumpRecoiling || isBoopRecoiling) {
+				if (!other.GetComponent<Monkey> ().isDashRecoiling && !other.GetComponent<Monkey> ().isJumpRecoiling && !other.GetComponent<Monkey> ().isBoopRecoiling && !other.GetComponent<Monkey>().isJumping && !other.GetComponent<Monkey>().isStoic) {
+					other.GetComponent<Monkey> ().recoilBoopCall (recoilingVector);
+					other.GetComponent<Monkey> ().isShook = true;
+				}
+			}
 		}
 	}
 
 	void dashMoveParse() {
 		//mouse to playfield raycast
 		RaycastHit hitInfo = new RaycastHit ();
-		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo);
+		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo, 1000, raycastLayer);
 		projectingValidMove = false;
 		if (hitInfo.collider != null) {
 			Vector3 cursorPos = hitInfo.point;
@@ -72,13 +87,32 @@ public class Monkey : MonoBehaviour {
 	void jumpMoveParse() {
 		//mouse to playfield raycast
 		RaycastHit hitInfo = new RaycastHit ();
-		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo);
+		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo, 1000, raycastLayer);
 		projectingValidMove = false;
 		if (hitInfo.collider != null) {
 			Vector3 cursorPos = hitInfo.point;
-			cursorPos.y += 0.2f;
+			cursorPos.y = 1.2f;
 			projectedTarget = cursorPos;
-			projectedTarget.y = 1;
+			projectedTarget.y = 1.2f;
+			//draw jump line
+			Vector3[] jumpLineArray = new Vector3[] { this.transform.position, cursorPos };
+			actionRenderer.positionCount = 2;
+			actionRenderer.SetPositions (jumpLineArray);
+			//valid move range
+			projectingValidMove = true;
+		}
+	}
+
+	void throwMoveParse() {
+		//mouse to playfield raycast
+		RaycastHit hitInfo = new RaycastHit ();
+		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo, 1000, raycastLayer);
+		projectingValidMove = false;
+		if (hitInfo.collider != null) {
+			Vector3 cursorPos = hitInfo.point;
+			cursorPos.y =1.2f;
+			projectedTarget = cursorPos;
+			projectedTarget.y = 1.2f;
 			//draw jump line
 			Vector3[] jumpLineArray = new Vector3[] { this.transform.position, cursorPos };
 			actionRenderer.positionCount = 2;
@@ -103,12 +137,29 @@ public class Monkey : MonoBehaviour {
 		if (!gameManager.instance.jumpRangeDisplay.activeSelf) {
 			gameManager.instance.jumpRangeDisplay.SetActive (true);
 		}
-		dashRangeDisplay.transform.localScale = new Vector3 (dashRange*2,0.1f,dashRange*2);
+	}
+
+	public void ThrowPathStart() {
+		isThrowPathing = true;
+		//show jump range
+		if (!gameManager.instance.jumpRangeDisplay.activeSelf) {
+			gameManager.instance.jumpRangeDisplay.SetActive (true);
+		}
 	}
 
 	public void dashGoCall() {
 		dashingVector = moveTarget - this.transform.position;
-		StartCoroutine (dashGo ());
+		coroutineCall = StartCoroutine (dashGo ());
+	}
+
+	public void jumpGoCall() {
+		jumpingVector = moveTarget - this.transform.position;
+		coroutineCall = StartCoroutine (jumpGo ());
+	}
+
+	public void throwGoCall() {
+		throwingVector = moveTarget - this.transform.position;
+		coroutineCall = StartCoroutine (throwGo ());
 	}
 
 	public IEnumerator dashGo() {
@@ -123,8 +174,32 @@ public class Monkey : MonoBehaviour {
 		isDashing = false;
 	}
 
-	public void jumpGoCall() {
-		StartCoroutine (jumpGo ());
+	public IEnumerator throwGo() {
+		bool thrownStoneOnTarget = false;
+		thrownStoneHit = false;
+		Vector3 startPos = this.transform.position;
+		RaycastHit stoneHitInfo;
+		Physics.Linecast (startPos, moveTarget, out stoneHitInfo, throwRaycastLayer);
+		if (stoneHitInfo.collider != null) {
+			moveTarget = stoneHitInfo.transform.position;
+			thrownStoneHit = true;
+			thrownStoneOnTarget = true;
+		}
+		Vector3 stoneStartVector = this.transform.position;
+		stoneStartVector.y = 2;
+		GameObject thrownStone = Instantiate (stoneObject, stoneStartVector, Quaternion.identity);
+		thrownStone.GetComponent<stoneScript> ().parentMonkey = this;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			thrownStone.transform.position = Vector3.Lerp (stoneStartVector,moveTarget,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		if (thrownStoneHit) {
+			stoneHitInfo.collider.transform.root.GetComponent<Monkey>().throwRecoilCall (throwingVector);
+		}
+		if (thrownStoneHit || !thrownStoneOnTarget) {
+			Destroy (thrownStone);
+		}
 	}
 
 	public IEnumerator jumpGo() {
@@ -137,31 +212,101 @@ public class Monkey : MonoBehaviour {
 				yield return null;
 			}
 			this.transform.position = moveTarget;
+			isStoic = true;
 			isJumping = false;
+			for (int i = 0; i < inputManager.instance.playerArray.Count; i++) {
+				if (inputManager.instance.playerArray[i]!=this && Vector3.Distance (inputManager.instance.playerArray [i].transform.position, this.transform.position) <= jumpSlamRadius) {
+					inputManager.instance.playerArray [i].jumpRecoilCall (jumpingVector);
+				}
+			}
+		}
+	}
+
+	public void jumpRecoilCall(Vector3 fedVector) {
+		if (!isJumpRecoiling) {
+			recoilingVector = ((fedVector.normalized * jumpSlamMagnitude) + this.transform.position) - this.transform.position;
+			coroutineCall = StartCoroutine (jumpRecoil(fedVector));
+			isJumpRecoiling = true;
 		}
 	}
 
 	public void dashRecoilCall(Vector3 fedVector) {
 		if (!isDashRecoiling) {
-			StartCoroutine (dashRecoil (fedVector));
+			recoilMultiplier = 1f;
+			if (isDashing) {
+				recoilMultiplier = 1.5f;
+				StopCoroutine (coroutineCall);
+				isDashing = false;
+			}
+			recoilingVector = fedVector * recoilMultiplier;
+			coroutineCall = StartCoroutine (dashRecoil (fedVector));
+			isDashRecoiling = true;
+		}
+	}
+
+	public void recoilBoopCall(Vector3 fedVector) {
+		if (!isBoopRecoiling) {
+			recoilingVector = ((fedVector.normalized * recoilBoopMagnitude) + this.transform.position) - this.transform.position;
+			coroutineCall = StartCoroutine (boopRecoil (fedVector));
+			isBoopRecoiling = true;
+		}
+	}
+
+	public void throwRecoilCall(Vector3 fedVector) {
+		if (!isThrowRecoiling) {
+			recoilingVector = ((fedVector.normalized * throwBoopMagnitude) + this.transform.position) - this.transform.position;
+			coroutineCall = StartCoroutine (throwRecoil (fedVector));
+			isThrowRecoiling = true;
 		}
 	}
 
 	public IEnumerator dashRecoil(Vector3 dasherVector) {
-		float recoilMultiplier = 1f;
-		if (isDashing) {
-			recoilMultiplier = 1.5f;
-		}
+		Debug.Log ("DRC " + this.playerNo + dasherVector);
 		Vector3 knockTarget = (dasherVector * recoilMultiplier) + this.transform.position;
 		Vector3 startPos = this.transform.position;
 		float startTime = Time.time;
-		isDashRecoiling = true;
 		while (Time.time <= startTime + dashTime) {
 			this.transform.position = Vector3.Lerp (startPos,knockTarget,(Time.time-startTime)/dashTime);
 			yield return null;
 		}
 		this.transform.position = knockTarget;
 		isDashRecoiling = false;
+	}
+
+	public IEnumerator jumpRecoil(Vector3 jumperVector) {
+		Vector3 knockTarget = (jumperVector.normalized * jumpSlamMagnitude) + this.transform.position;
+		Vector3 startPos = this.transform.position;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			this.transform.position = Vector3.Lerp (startPos,knockTarget,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		this.transform.position = knockTarget;
+		isJumpRecoiling = false;
+	}
+
+	public IEnumerator boopRecoil(Vector3 booperVector) {
+		Vector3 knockTarget = (booperVector.normalized * recoilBoopMagnitude) + this.transform.position;
+		Vector3 startPos = this.transform.position;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			this.transform.position = Vector3.Lerp (startPos,knockTarget,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		this.transform.position = knockTarget;
+		isBoopRecoiling = false;
+	}
+
+	public IEnumerator throwRecoil(Vector3 throwerVector) {
+		Vector3 knockTarget = (throwerVector.normalized * throwBoopMagnitude) + this.transform.position;
+		Vector3 startPos = this.transform.position;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			this.transform.position = Vector3.Lerp (startPos,knockTarget,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		this.transform.position = knockTarget;
+		isThrowRecoiling = false;
 	}
 
 	public void startPlotting() {
@@ -171,6 +316,7 @@ public class Monkey : MonoBehaviour {
 	public void stopPathing() {
 		isDashPathing = false;
 		isJumpPathing = false;
+		isThrowPathing = false;
 		dashRangeDisplay.SetActive (false);
 		inputManager.instance.moveTargetMarker.SetActive (false);
 		gameManager.instance.jumpRangeDisplay.SetActive (false);

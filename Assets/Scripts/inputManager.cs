@@ -56,6 +56,16 @@ public class inputManager : MonoBehaviour {
 			}
 		}
 
+		if (Input.GetKeyDown ("3")) {
+			for (int i = 0; i < playerArray.Count; i++) {
+				if (playerArray [i].activePlayer) {
+					playerArray [i].stopPathing ();
+					playerArray [i].ThrowPathStart ();
+					playerArray [i].moveType = "throw";
+				}
+			}
+		}
+
 		}
 
 	void resolveInput(Monkey fedPlayer) {
