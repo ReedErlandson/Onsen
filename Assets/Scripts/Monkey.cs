@@ -4,11 +4,15 @@ using UnityEngine;
 
 public class Monkey : MonoBehaviour {
 	public GameObject dashRangeDisplay;
+	public GameObject blockPreview;
+	public GameObject blockProjector;
 	public GameObject stoneObject;
 	public LineRenderer actionRenderer;
 	public float dashRange;
 	public float jumpSlamRadius;
 	public float jumpSlamMagnitude;
+	public float slamRadius;
+	public float slamMagnitude;
 	public float dashTime;
 	public float jumpTime;
 	public float recoilBoopMagnitude;
@@ -17,12 +21,14 @@ public class Monkey : MonoBehaviour {
 	private bool isDashPathing = false;
 	private bool isJumpPathing = false;
 	private bool isThrowPathing = false;
+	private bool isSlamPathing = false;
+	private bool isBlockPathing = false;
 	private bool isStoic = false;
 	private Coroutine coroutineCall;
 	[HideInInspector]
-	public bool isDashing, isJumping, isDashRecoiling, isJumpRecoiling, isBoopRecoiling, isThrowRecoiling, isShook, projectingValidMove, moveLocked, activePlayer, hasMoved, thrownStoneHit;
+	public bool isDashing, isJumping, isDashRecoiling, isJumpRecoiling, isBoopRecoiling, isGrabRecoiling, isThrowRecoiling, isSlamRecoiling, isShook, projectingValidMove, moveLocked, activePlayer, hasMoved, thrownStoneHit;
 	[HideInInspector]
-	public Vector3 dashingVector, throwingVector, jumpingVector, recoilingVector, moveTarget, projectedTarget;
+	public Vector3 dashingVector, throwingVector, jumpingVector, slammingVector, recoilingVector, moveTarget, projectedTarget;
 	[HideInInspector]
 	public string moveType = "dash";
 	[HideInInspector]
@@ -43,17 +49,26 @@ public class Monkey : MonoBehaviour {
 			jumpMoveParse ();
 		} else if (isThrowPathing) {
 			throwMoveParse ();
+		} else if (isSlamPathing) {
+			slamMoveParse ();
+		} else if (isBlockPathing) {
+			blockMoveParse ();
 		}
 	}
 
 	void OnTriggerEnter(Collider other) {
 		if (other.gameObject.CompareTag("Monker")) {
 			if (isDashing) {
-				if (other.GetComponent<Monkey> ().isDashing) {
-					dashRecoilCall (other.GetComponent<Monkey> ().dashingVector);
+				if (other.GetComponent<Monkey> ().moveType != "block") {
+					if (other.GetComponent<Monkey> ().isDashing) {
+						dashRecoilCall (other.GetComponent<Monkey> ().dashingVector);
+					}
+					other.GetComponent<Monkey> ().dashRecoilCall (dashingVector);
+					other.GetComponent<Monkey> ().isShook = true;
+				} else {
+					isShook = true;
+					grabRecoilCall(other.GetComponent<Monkey>().moveTarget);
 				}
-				other.GetComponent<Monkey> ().dashRecoilCall (dashingVector);
-				other.GetComponent<Monkey> ().isShook = true;
 			} else if (isDashRecoiling || isJumpRecoiling || isBoopRecoiling) {
 				if (!other.GetComponent<Monkey> ().isDashRecoiling && !other.GetComponent<Monkey> ().isJumpRecoiling && !other.GetComponent<Monkey> ().isBoopRecoiling && !other.GetComponent<Monkey>().isJumping && !other.GetComponent<Monkey>().isStoic) {
 					other.GetComponent<Monkey> ().recoilBoopCall (recoilingVector);
@@ -70,7 +85,7 @@ public class Monkey : MonoBehaviour {
 		projectingValidMove = false;
 		if (hitInfo.collider != null) {
 			Vector3 cursorPos = hitInfo.point;
-			cursorPos.y += 0.2f;
+			cursorPos.y = 1.2f;
 			if (Vector3.Distance (cursorPos, this.transform.position) <= dashRange) {
 				projectedTarget = cursorPos;
 				projectedTarget.y = 1;
@@ -122,6 +137,45 @@ public class Monkey : MonoBehaviour {
 		}
 	}
 
+	void blockMoveParse() {
+		//mouse to playfield raycast
+		RaycastHit hitInfo = new RaycastHit ();
+		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo, 1000, raycastLayer);
+		projectingValidMove = false;
+		if (hitInfo.collider != null) {
+			Vector3 cursorPos = hitInfo.point;
+			cursorPos.y = 1.2f;
+			if (Vector3.Distance (cursorPos, this.transform.position) <= dashRange) {
+				projectedTarget = cursorPos;
+				projectedTarget.y = 1.2f;
+				//draw dash line
+				Vector3[] dashLineArray = new Vector3[] { this.transform.position, cursorPos };
+				actionRenderer.positionCount = 2;
+				actionRenderer.SetPositions (dashLineArray);
+				//valid move range
+				projectingValidMove = true;
+			}
+		}
+	}
+
+	void slamMoveParse () {
+		//mouse to playfield raycast
+		RaycastHit hitInfo = new RaycastHit ();
+		Physics.Raycast(Camera.main.ScreenPointToRay (new Vector3(Input.mousePosition.x, Input.mousePosition.y, 100)), out hitInfo, 1000, raycastLayer);
+		projectingValidMove = false;
+		if (hitInfo.collider != null) {
+			Vector3 cursorPos = hitInfo.point;
+			cursorPos.y = 1.2f;
+			projectedTarget = cursorPos;
+			projectedTarget.y = 1.2f;
+			//rotate slam thing
+			gameManager.instance.slamRangeDisplay.transform.forward = cursorPos - this.transform.position;
+			gameManager.instance.slamRangeDisplay.transform.Rotate (90, 0, 0);
+			//valid move range
+			projectingValidMove = true;
+		}
+	}
+
 	public void DashPathStart() {
 		isDashPathing = true;
 		//show dash range
@@ -145,6 +199,28 @@ public class Monkey : MonoBehaviour {
 		if (!gameManager.instance.jumpRangeDisplay.activeSelf) {
 			gameManager.instance.jumpRangeDisplay.SetActive (true);
 		}
+	}
+
+	public void SlamPathStart() {
+		isSlamPathing = true;
+		//show slam range
+		if (!gameManager.instance.slamRangeDisplay.activeSelf) {
+			gameManager.instance.slamRangeDisplay.SetActive (true);
+		}
+		gameManager.instance.slamRangeDisplay.transform.position = this.transform.position;
+
+	}
+
+	public void BlockPathStart() {
+		isBlockPathing = true;
+		//show block range
+		if (!blockPreview.activeSelf) {
+			blockPreview.SetActive (true);
+		}
+		if (!dashRangeDisplay.activeSelf) {
+			dashRangeDisplay.SetActive (true);
+		}
+		dashRangeDisplay.transform.localScale = new Vector3 (dashRange*2,0.1f,dashRange*2);
 	}
 
 	public void dashGoCall() {
@@ -175,30 +251,38 @@ public class Monkey : MonoBehaviour {
 	}
 
 	public IEnumerator throwGo() {
-		bool thrownStoneOnTarget = false;
-		thrownStoneHit = false;
-		Vector3 startPos = this.transform.position;
-		RaycastHit stoneHitInfo;
-		Physics.Linecast (startPos, moveTarget, out stoneHitInfo, throwRaycastLayer);
-		if (stoneHitInfo.collider != null) {
-			moveTarget = stoneHitInfo.transform.position;
-			thrownStoneHit = true;
-			thrownStoneOnTarget = true;
-		}
-		Vector3 stoneStartVector = this.transform.position;
-		stoneStartVector.y = 2;
-		GameObject thrownStone = Instantiate (stoneObject, stoneStartVector, Quaternion.identity);
-		thrownStone.GetComponent<stoneScript> ().parentMonkey = this;
-		float startTime = Time.time;
-		while (Time.time <= startTime + dashTime) {
-			thrownStone.transform.position = Vector3.Lerp (stoneStartVector,moveTarget,(Time.time-startTime)/dashTime);
-			yield return null;
-		}
-		if (thrownStoneHit) {
-			stoneHitInfo.collider.transform.root.GetComponent<Monkey>().throwRecoilCall (throwingVector);
-		}
-		if (thrownStoneHit || !thrownStoneOnTarget) {
-			Destroy (thrownStone);
+		if (!isShook) {
+			bool thrownStoneOnTarget = false;
+			thrownStoneHit = false;
+			Vector3 startPos = this.transform.position;
+			RaycastHit stoneHitInfo;
+			Physics.Linecast (startPos, moveTarget, out stoneHitInfo, throwRaycastLayer);
+			if (stoneHitInfo.collider != null) {
+				moveTarget = stoneHitInfo.transform.position;
+				thrownStoneHit = true;
+				thrownStoneOnTarget = true;
+			}
+			Vector3 stoneStartVector = this.transform.position;
+			stoneStartVector.y = 2;
+			GameObject thrownStone = Instantiate (stoneObject, stoneStartVector, Quaternion.identity);
+			thrownStone.GetComponent<stoneScript> ().parentMonkey = this;
+			float startTime = Time.time;
+			while (Time.time <= startTime + dashTime) {
+				thrownStone.transform.position = Vector3.Lerp (stoneStartVector, moveTarget, (Time.time - startTime) / dashTime);
+				yield return null;
+			}
+			if (stoneHitInfo.collider.transform.root.GetComponent<Monkey> ().moveType != "block") {
+				if (thrownStoneHit) {
+					stoneHitInfo.collider.transform.root.GetComponent<Monkey> ().throwRecoilCall (throwingVector);
+				}
+				if (thrownStoneHit || !thrownStoneOnTarget) {
+					Destroy (thrownStone);
+				}
+			} else {
+				Destroy (thrownStone);
+				stoneHitInfo.collider.transform.root.GetComponent<Monkey> ().moveTarget = this.transform.position;
+				stoneHitInfo.collider.transform.root.GetComponent<Monkey> ().throwGoCall ();
+			}
 		}
 	}
 
@@ -222,12 +306,29 @@ public class Monkey : MonoBehaviour {
 		}
 	}
 
+	public void slamGo() {
+		if (!isShook) {
+			slammingVector = moveTarget - this.transform.position;
+			for (int i = 0; i < inputManager.instance.playerArray.Count; i++) {
+				if (inputManager.instance.playerArray[i]!=this && Vector3.Distance (inputManager.instance.playerArray [i].transform.position, this.transform.position) <= slamRadius
+					&& Vector3.Dot(slammingVector.normalized, (inputManager.instance.playerArray[i].transform.position - this.transform.position).normalized) > 0) {
+					//inputManager.instance.playerArray [i].slamRecoilCall (slammingVector);
+					inputManager.instance.playerArray[i].slamRecoilCall (slammingVector);
+				}
+			}
+		}
+	}
+
 	public void jumpRecoilCall(Vector3 fedVector) {
 		if (!isJumpRecoiling) {
 			recoilingVector = ((fedVector.normalized * jumpSlamMagnitude) + this.transform.position) - this.transform.position;
 			coroutineCall = StartCoroutine (jumpRecoil(fedVector));
 			isJumpRecoiling = true;
 		}
+	}
+
+	public void blockRecoilCall(string blocktype, Vector3 fedVector) {
+
 	}
 
 	public void dashRecoilCall(Vector3 fedVector) {
@@ -241,6 +342,14 @@ public class Monkey : MonoBehaviour {
 			recoilingVector = fedVector * recoilMultiplier;
 			coroutineCall = StartCoroutine (dashRecoil (fedVector));
 			isDashRecoiling = true;
+		}
+	}
+
+	public void slamRecoilCall(Vector3 fedVector) {
+		if (!isSlamRecoiling) {
+			recoilingVector = ((fedVector.normalized * slamMagnitude) + this.transform.position) - this.transform.position;
+			coroutineCall = StartCoroutine (slamRecoil (fedVector));
+			isSlamRecoiling = true;
 		}
 	}
 
@@ -260,8 +369,30 @@ public class Monkey : MonoBehaviour {
 		}
 	}
 
+	public void grabRecoilCall(Vector3 fedVector) {
+		if (!isGrabRecoiling) {
+			if (isDashing) {
+				StopCoroutine (coroutineCall);
+				isDashing = false;
+			}
+			recoilingVector = fedVector - this.transform.position;
+			coroutineCall = StartCoroutine (grabRecoil (fedVector));
+			isGrabRecoiling = true;
+		}
+	}
+
+	public IEnumerator grabRecoil(Vector3 targetVector) {
+		Vector3 startPos = this.transform.position;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			this.transform.position = Vector3.Lerp (startPos,targetVector,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		this.transform.position = targetVector;
+		isGrabRecoiling = false;
+	}
+
 	public IEnumerator dashRecoil(Vector3 dasherVector) {
-		Debug.Log ("DRC " + this.playerNo + dasherVector);
 		Vector3 knockTarget = (dasherVector * recoilMultiplier) + this.transform.position;
 		Vector3 startPos = this.transform.position;
 		float startTime = Time.time;
@@ -283,6 +414,18 @@ public class Monkey : MonoBehaviour {
 		}
 		this.transform.position = knockTarget;
 		isJumpRecoiling = false;
+	}
+
+	public IEnumerator slamRecoil(Vector3 slammerVector) {
+		Vector3 knockTarget = (slammerVector.normalized * slamMagnitude) + this.transform.position;
+		Vector3 startPos = this.transform.position;
+		float startTime = Time.time;
+		while (Time.time <= startTime + dashTime) {
+			this.transform.position = Vector3.Lerp (startPos,knockTarget,(Time.time-startTime)/dashTime);
+			yield return null;
+		}
+		this.transform.position = knockTarget;
+		isSlamRecoiling = false;
 	}
 
 	public IEnumerator boopRecoil(Vector3 booperVector) {
@@ -317,9 +460,15 @@ public class Monkey : MonoBehaviour {
 		isDashPathing = false;
 		isJumpPathing = false;
 		isThrowPathing = false;
+		isSlamPathing = false;
+		isBlockPathing = false;
 		dashRangeDisplay.SetActive (false);
 		inputManager.instance.moveTargetMarker.SetActive (false);
 		gameManager.instance.jumpRangeDisplay.SetActive (false);
+		gameManager.instance.slamRangeDisplay.SetActive (false);
+		gameManager.instance.slamProjector.SetActive (false);
+		blockPreview.SetActive (false);
+		blockProjector.SetActive (false);
 		actionRenderer.positionCount = 0;
 	}
 

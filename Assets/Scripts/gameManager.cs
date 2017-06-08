@@ -6,6 +6,8 @@ public class gameManager : MonoBehaviour {
 	//sloppy
 	public static gameManager instance;
 	public GameObject jumpRangeDisplay;
+	public GameObject slamRangeDisplay;
+	public GameObject slamProjector;
 
 	string currentPhase = "plotting";
 	// Use this for initialization
